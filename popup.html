@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BGG Rules Extractor</title>
+    <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+    <div class="extension-popup">
+        <div class="header">
+            <h1>BGG Rules Extractor</h1>
+            <div class="game-info" id="gameInfo">
+                <div class="game-icon" id="gameIcon">?</div>
+                <div class="game-title" id="gameTitle">No game detected</div>
+            </div>
+        </div>
+
+        <div class="content">
+            <div class="status-section">
+                <div class="status-item">
+                    <div class="status-icon" id="gameStatus">⚠</div>
+                    <span class="status-text" id="gameStatusText">Checking page...</span>
+                </div>
+                <div class="status-item">
+                    <div class="status-icon" id="rulesStatus">⚠</div>
+                    <span class="status-text" id="rulesStatusText">Checking Rules forum...</span>
+                    <span class="status-count" id="rulesCount"></span>
+                </div>
+                <div class="status-item">
+                    <div class="status-icon" id="driveStatus">⚠</div>
+                    <span class="status-text" id="driveStatusText">Checking Google Drive...</span>
+                </div>
+            </div>
+
+            <div class="actions-section">
+                <button class="primary-button" id="extractButton" disabled>
+                    Extract Rules Forums
+                </button>
+                <div class="secondary-buttons">
+                    <button class="secondary-button" id="settingsButton">Settings</button>
+                    <button class="secondary-button" id="helpButton">Help</button>
+                </div>
+            </div>
+
+            <div class="progress-section hidden" id="progressSection">
+                <div class="progress-text" id="progressText">Extracting Rules Forums...</div>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill"></div>
+                </div>
+                <div class="progress-stats">
+                    <span id="progressCount">0 / 0</span>
+                    <span id="progressPercent">0%</span>
+                </div>
+            </div>
+
+            <div class="result-section hidden" id="resultSection">
+                <div class="result-message" id="resultMessage"></div>
+                <div class="result-actions">
+                    <button class="secondary-button" id="viewFileButton">View File</button>
+                    <button class="secondary-button" id="downloadButton">Download</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <div class="footer-text">
+                Powered by <a href="#" class="footer-link">BGG Rules Extractor</a>
+            </div>
+        </div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>
+

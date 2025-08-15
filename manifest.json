@@ -1,0 +1,51 @@
+{
+  "manifest_version": 3,
+  "name": "BGG Rules Extractor",
+  "version": "1.0.0",
+  "description": "Extract Rules forums from BoardGameGeek game pages and save to Google Drive",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA7V6Gx8K4PDcaDuGyf0gEsJYl1jxpNxs7oRikV0sr2yKg/7sOhiHmh3GLZ5ajuLnbqlGWl2ZTVwx9crAFw7ygAWMzLvBGiEqzBiwpczPADyCUgZVHtADj2tnKNwh46nRkA0yuxR5xGymouCUrDcZ3tgjcurQ0bJvftJgrCXa1YFZjXpDz28wA5u+htuIrJzSEnDwZAjkcoNuKM+mr1Y+FpPTF8Y0fr2r1k9DMzBail/cPZyg5yxvinN1VBBCH8cEIWckdGEBJqsQfVZZDipceyZSQwvPhIe2rcsysf0jA5k3IN2l1sXgUpaKPygmTxXpP6w1TwEg4cbCQrhDYjSFJnwIDAQAB",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "identity",
+	"notifications"
+  ],
+  "host_permissions": [
+    "https://boardgamegeek.com/*",
+    "https://www.googleapis.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "BGG Rules Extractor",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://boardgamegeek.com/boardgame/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "oauth2": {
+    "client_id": "1058685213583-6q7jv168rkngc0do12g625q2ocge1pru.apps.googleusercontent.com",
+    "scopes": [
+      "https://www.googleapis.com/auth/drive.file",
+	  "https://www.googleapis.com/auth/drive.appdata"
+    ]
+  }
+}
+
