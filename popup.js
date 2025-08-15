@@ -1,183 +1,493 @@
-// Popup script for BGG Rules Extractor
+// Popup controller for BGG Rules Extractor
 class PopupController {
     constructor() {
         this.gameData = null;
-        this.isExtracting = false;
+        this.selectedFolderId = 'root';
+        this.selectedFolderPath = 'My Drive';
+        this.currentFolderId = 'root';
+        this.folderHistory = [];
+        this.allFolders = [];
+        this.uploadedFileId = null;
+        
         this.initializeElements();
-        this.attachEventListeners();
-        this.checkCurrentTab();
+        this.setupEventListeners();
+        this.checkPageAndAuth();
     }
 
     initializeElements() {
         // Game info elements
-        this.gameIcon = document.getElementById('gameIcon');
         this.gameTitle = document.getElementById('gameTitle');
+        this.gameDetected = document.getElementById('gameDetected');
+        this.rulesFound = document.getElementById('rulesFound');
+        this.driveConnected = document.getElementById('driveConnected');
         
-        // Status elements
-        this.gameStatus = document.getElementById('gameStatus');
-        this.gameStatusText = document.getElementById('gameStatusText');
-        this.rulesStatus = document.getElementById('rulesStatus');
-        this.rulesStatusText = document.getElementById('rulesStatusText');
-        this.rulesCount = document.getElementById('rulesCount');
-        this.driveStatus = document.getElementById('driveStatus');
-        this.driveStatusText = document.getElementById('driveStatusText');
+        // Section elements
+        this.driveSection = document.getElementById('driveSection');
+        this.actionSection = document.getElementById('actionSection');
+        
+        // Drive elements
+        this.connectDriveBtn = document.getElementById('connectDriveBtn');
+        this.folderSelection = document.getElementById('folderSelection');
+        this.selectedFolderPathEl = document.getElementById('selectedFolderPath');
+        this.browseFoldersBtn = document.getElementById('browseFoldersBtn');
         
         // Action elements
-        this.extractButton = document.getElementById('extractButton');
-        this.settingsButton = document.getElementById('settingsButton');
-        this.helpButton = document.getElementById('helpButton');
-        
-        // Progress elements
+        this.extractBtn = document.getElementById('extractBtn');
         this.progressSection = document.getElementById('progressSection');
-        this.progressText = document.getElementById('progressText');
         this.progressFill = document.getElementById('progressFill');
-        this.progressCount = document.getElementById('progressCount');
-        this.progressPercent = document.getElementById('progressPercent');
-        
-        // Result elements
+        this.progressText = document.getElementById('progressText');
         this.resultSection = document.getElementById('resultSection');
         this.resultMessage = document.getElementById('resultMessage');
-        this.viewFileButton = document.getElementById('viewFileButton');
-        this.downloadButton = document.getElementById('downloadButton');
+        this.viewFileBtn = document.getElementById('viewFileBtn');
+        
+        // Modal elements
+        this.folderModal = document.getElementById('folderModal');
+        this.closeFolderModal = document.getElementById('closeFolderModal');
+        this.breadcrumb = document.getElementById('breadcrumb');
+        this.backBtn = document.getElementById('backBtn');
+        this.newFolderBtn = document.getElementById('newFolderBtn');
+        this.folderList = document.getElementById('folderList');
+        this.folderLoading = document.getElementById('folderLoading');
+        this.currentPath = document.getElementById('currentPath');
+        this.cancelFolderBtn = document.getElementById('cancelFolderBtn');
+        this.selectFolderBtn = document.getElementById('selectFolderBtn');
+        
+        // New folder modal elements
+        this.newFolderModal = document.getElementById('newFolderModal');
+        this.closeNewFolderModal = document.getElementById('closeNewFolderModal');
+        this.folderNameInput = document.getElementById('folderNameInput');
+        this.cancelNewFolderBtn = document.getElementById('cancelNewFolderBtn');
+        this.createFolderBtn = document.getElementById('createFolderBtn');
+        
+        // Footer elements
+        this.settingsBtn = document.getElementById('settingsBtn');
+        this.helpBtn = document.getElementById('helpBtn');
     }
 
-    attachEventListeners() {
-        this.extractButton.addEventListener('click', () => this.startExtraction());
-        this.settingsButton.addEventListener('click', () => this.openSettings());
-        this.helpButton.addEventListener('click', () => this.openHelp());
-        this.viewFileButton.addEventListener('click', () => this.viewFile());
-        this.downloadButton.addEventListener('click', () => this.downloadFile());
+    setupEventListeners() {
+        // Drive authentication
+        this.connectDriveBtn?.addEventListener('click', () => this.authenticateGoogleDrive());
         
-        // Listen for messages from content script
+        // Folder selection
+        this.browseFoldersBtn?.addEventListener('click', () => this.openFolderBrowser());
+        
+        // Action buttons
+        this.extractBtn?.addEventListener('click', () => this.startExtraction());
+        this.viewFileBtn?.addEventListener('click', () => this.viewFile());
+        
+        // Modal controls
+        this.closeFolderModal?.addEventListener('click', () => this.closeFolderModalHandler());
+        this.cancelFolderBtn?.addEventListener('click', () => this.closeFolderModalHandler());
+        this.selectFolderBtn?.addEventListener('click', () => this.selectCurrentFolder());
+        this.backBtn?.addEventListener('click', () => this.navigateBack());
+        this.newFolderBtn?.addEventListener('click', () => this.openNewFolderModal());
+        
+        // New folder modal
+        this.closeNewFolderModal?.addEventListener('click', () => this.closeNewFolderModalHandler());
+        this.cancelNewFolderBtn?.addEventListener('click', () => this.closeNewFolderModalHandler());
+        this.createFolderBtn?.addEventListener('click', () => this.createNewFolder());
+        this.folderNameInput?.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                this.createNewFolder();
+            }
+        });
+        
+        // Footer buttons
+        this.settingsBtn?.addEventListener('click', () => this.openSettings());
+        this.helpBtn?.addEventListener('click', () => this.openHelp());
+        
+        // Modal overlay clicks
+        this.folderModal?.addEventListener('click', (e) => {
+            if (e.target === this.folderModal) this.closeFolderModalHandler();
+        });
+        this.newFolderModal?.addEventListener('click', (e) => {
+            if (e.target === this.newFolderModal) this.closeNewFolderModalHandler();
+        });
+        
+        // Message listener for content script
         chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             this.handleMessage(message, sender, sendResponse);
         });
+        
+        // Keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                this.closeFolderModalHandler();
+                this.closeNewFolderModalHandler();
+            }
+        });
     }
 
-    async checkCurrentTab() {
+    async checkPageAndAuth() {
         try {
-            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            // Check if we're on a BGG page and get game data
+            const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+            const tab = tabs[0];
             
-            if (!tab.url.includes('boardgamegeek.com/boardgame/')) {
-                this.updateGameStatus('error', 'Not on a BGG game page');
-                this.updateRulesStatus('error', 'Navigate to a BGG game page');
-                this.updateDriveStatus('warning', 'Waiting for game page');
+            if (!tab.url.includes('boardgamegeek.com')) {
+                this.updateGameStatus('error', 'Not on a BoardGameGeek page');
                 return;
             }
-
+            
             // Send message to content script to check page
-            chrome.tabs.sendMessage(tab.id, { action: 'checkPage' }, (response) => {
-                if (chrome.runtime.lastError) {
-                    this.updateGameStatus('error', 'Content script not loaded');
-                    return;
-                }
+            const response = await chrome.tabs.sendMessage(tab.id, { action: 'checkPage' });
+            
+            if (response && response.success && response.data) {
+                this.gameData = response.data;
+                this.updateGameInfo(response.data);
+                this.driveSection.style.display = 'block';
                 
-                if (response && response.success) {
-                    this.gameData = response.data;
-                    this.updateUI();
-                } else {
-                    this.updateGameStatus('error', 'Failed to detect game');
-                }
-            });
+                // Check Google Drive authentication
+                await this.checkGoogleDriveAuth();
+            } else {
+                this.updateGameStatus('error', 'Game not detected or no Rules forum found');
+            }
             
         } catch (error) {
-            console.error('Error checking current tab:', error);
+            console.error('Error checking page:', error);
             this.updateGameStatus('error', 'Error checking page');
         }
     }
 
-    updateUI() {
-        if (!this.gameData) return;
-
-        // Update game info
-        this.gameTitle.textContent = this.gameData.title || 'Unknown Game';
-        this.gameIcon.textContent = this.gameData.title ? this.gameData.title.charAt(0).toUpperCase() : '?';
+    updateGameInfo(gameData) {
+        this.gameTitle.textContent = gameData.title;
         
         // Update status indicators
-        this.updateGameStatus('success', 'Game detected');
+        this.updateStatusItem(this.gameDetected, 'success', 'Game detected');
         
-        if (this.gameData.rulesForumCount > 0) {
-            this.updateRulesStatus('success', 'Rules forum found');
-            this.rulesCount.textContent = `(${this.gameData.rulesForumCount} threads)`;
+        if (gameData.rulesForumCount > 0) {
+            this.updateStatusItem(this.rulesFound, 'success', `Rules forum found (${gameData.rulesForumCount} threads)`);
         } else {
-            this.updateRulesStatus('warning', 'No Rules forum found');
-            this.rulesCount.textContent = '';
+            this.updateStatusItem(this.rulesFound, 'warning', 'No Rules forum found');
         }
+    }
+
+    updateStatusItem(element, status, text) {
+        element.className = `status-item ${status}`;
+        element.querySelector('.status-text').textContent = text;
         
-        // Check Google Drive authentication
-        this.checkGoogleDriveAuth();
-        
-        // Enable extract button if everything is ready
-        if (this.gameData.rulesForumCount > 0) {
-            this.extractButton.disabled = false;
+        const icon = element.querySelector('.status-icon');
+        switch (status) {
+            case 'success':
+                icon.textContent = '✓';
+                break;
+            case 'error':
+                icon.textContent = '✗';
+                break;
+            case 'warning':
+                icon.textContent = '⚠';
+                break;
+            default:
+                icon.textContent = '⏳';
         }
+    }
+
+    updateGameStatus(status, message) {
+        this.gameTitle.textContent = message;
+        this.updateStatusItem(this.gameDetected, status, message);
     }
 
     async checkGoogleDriveAuth() {
         try {
-            const token = await this.getAuthToken();
+            const token = await this.getValidToken();
             if (token) {
-                this.updateDriveStatus('success', 'Google Drive connected');
+                this.updateStatusItem(this.driveConnected, 'success', 'Google Drive connected');
+                this.folderSelection.style.display = 'flex';
+                this.connectDriveBtn.style.display = 'none';
+                this.actionSection.style.display = 'block';
+                this.extractBtn.disabled = false;
             } else {
-                this.updateDriveStatus('warning', 'Click to connect Google Drive');
-                this.driveStatusText.style.cursor = 'pointer';
-                this.driveStatusText.addEventListener('click', () => this.authenticateGoogleDrive());
+                this.updateStatusItem(this.driveConnected, 'error', 'Google Drive not connected');
+                this.folderSelection.style.display = 'none';
+                this.connectDriveBtn.style.display = 'block';
             }
         } catch (error) {
-            this.updateDriveStatus('error', 'Google Drive connection failed');
+            console.error('Auth check error:', error);
+            this.updateStatusItem(this.driveConnected, 'error', 'Authentication failed');
+            this.folderSelection.style.display = 'none';
+            this.connectDriveBtn.style.display = 'block';
         }
     }
 
-    async getAuthToken() {
-        return new Promise((resolve) => {
-            chrome.identity.getAuthToken({ interactive: false }, (token) => {
-                resolve(token);
-            });
-        });
+    async getValidToken() {
+        try {
+            // First try to get cached token
+            let token = await chrome.identity.getAuthToken({ interactive: false });
+            
+            if (token) {
+                // Test if token is valid by making a simple API call
+                const testResponse = await fetch('https://www.googleapis.com/drive/v3/about?fields=user', {
+                    headers: {
+                        'Authorization': `Bearer ${token}`
+                    }
+                });
+                
+                if (testResponse.ok) {
+                    return token;
+                } else {
+                    // Token is invalid, remove it and get a new one
+                    await chrome.identity.removeCachedAuthToken({ token });
+                    token = await chrome.identity.getAuthToken({ interactive: false });
+                    return token;
+                }
+            }
+            
+            return null;
+        } catch (error) {
+            console.error('Error getting valid token:', error);
+            return null;
+        }
     }
 
     async authenticateGoogleDrive() {
         try {
-            const token = await new Promise((resolve, reject) => {
-                chrome.identity.getAuthToken({ interactive: true }, (token) => {
-                    if (chrome.runtime.lastError) {
-                        reject(chrome.runtime.lastError);
-                    } else {
-                        resolve(token);
-                    }
-                });
-            });
+            // Clear any cached tokens first
+            const oldToken = await chrome.identity.getAuthToken({ interactive: false });
+            if (oldToken) {
+                await chrome.identity.removeCachedAuthToken({ token: oldToken });
+            }
             
+            // Get fresh token with user interaction
+            const token = await chrome.identity.getAuthToken({ interactive: true });
             if (token) {
-                this.updateDriveStatus('success', 'Google Drive connected');
-                this.extractButton.disabled = false;
+                this.updateStatusItem(this.driveConnected, 'success', 'Google Drive connected');
+                this.folderSelection.style.display = 'flex';
+                this.connectDriveBtn.style.display = 'none';
+                this.actionSection.style.display = 'block';
+                this.extractBtn.disabled = false;
             }
         } catch (error) {
-            console.error('Authentication failed:', error);
-            this.updateDriveStatus('error', 'Authentication failed');
+            console.error('Authentication error:', error);
+            this.updateStatusItem(this.driveConnected, 'error', 'Authentication failed');
+        }
+    }
+
+    async openFolderBrowser() {
+        this.folderModal.style.display = 'flex';
+        this.currentFolderId = 'root';
+        this.folderHistory = [];
+        await this.loadFolders();
+    }
+
+    closeFolderModalHandler() {
+        this.folderModal.style.display = 'none';
+    }
+
+    async loadFolders() {
+        try {
+            // Show loading
+            this.folderList.innerHTML = '<div class="loading"><div class="spinner"></div><span>Loading folders...</span></div>';
+            
+            const token = await this.getValidToken();
+            if (!token) {
+                throw new Error('Not authenticated with Google Drive');
+            }
+            
+            // Get folders in current directory
+            let query = 'mimeType="application/vnd.google-apps.folder" and trashed=false';
+            if (this.currentFolderId === 'root') {
+                query += ' and "root" in parents';
+            } else {
+                query += ` and "${this.currentFolderId}" in parents`;
+            }
+            
+            const response = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name)&orderBy=name`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+            
+            if (!response.ok) {
+                throw new Error('Failed to fetch folders');
+            }
+            
+            const data = await response.json();
+            this.displayFolders(data.files || []);
+            this.updateBreadcrumb();
+            this.updateCurrentPath();
+            
+        } catch (error) {
+            console.error('Error loading folders:', error);
+            this.folderList.innerHTML = '<div class="empty-state"><div class="empty-state-icon">⚠️</div><div>Failed to load folders</div></div>';
+        }
+    }
+
+    displayFolders(folders) {
+        this.folderList.innerHTML = '';
+        
+        if (folders.length === 0) {
+            this.folderList.innerHTML = '<div class="empty-state"><div class="empty-state-icon">📁</div><div>No folders found</div></div>';
+            return;
+        }
+        
+        folders.forEach(folder => {
+            const item = document.createElement('div');
+            item.className = 'folder-item';
+            item.innerHTML = `
+                <span class="folder-item-icon">📁</span>
+                <span class="folder-item-name">${this.escapeHtml(folder.name)}</span>
+                <span class="folder-item-arrow">›</span>
+            `;
+            
+            item.addEventListener('click', () => {
+                this.navigateToFolder(folder.id, folder.name);
+            });
+            
+            this.folderList.appendChild(item);
+        });
+    }
+
+    escapeHtml(text) {
+        const div = document.createElement('div');
+        div.textContent = text;
+        return div.innerHTML;
+    }
+
+    navigateToFolder(folderId, folderName) {
+        this.folderHistory.push({
+            id: this.currentFolderId,
+            name: this.getCurrentFolderName()
+        });
+        this.currentFolderId = folderId;
+        this.backBtn.disabled = false;
+        this.loadFolders();
+    }
+
+    navigateBack() {
+        if (this.folderHistory.length > 0) {
+            const previous = this.folderHistory.pop();
+            this.currentFolderId = previous.id;
+            this.backBtn.disabled = this.folderHistory.length === 0;
+            this.loadFolders();
+        }
+    }
+
+    getCurrentFolderName() {
+        if (this.currentFolderId === 'root') {
+            return 'My Drive';
+        }
+        return 'Folder';
+    }
+
+    updateBreadcrumb() {
+        this.breadcrumb.innerHTML = '';
+        
+        if (this.folderHistory.length === 0) {
+            this.breadcrumb.innerHTML = '<span class="breadcrumb-item active">My Drive</span>';
+        } else {
+            const pathItems = ['My Drive', ...this.folderHistory.map(f => f.name), this.getCurrentFolderName()];
+            pathItems.forEach((name, index) => {
+                const item = document.createElement('span');
+                item.className = index === pathItems.length - 1 ? 'breadcrumb-item active' : 'breadcrumb-item';
+                item.textContent = name;
+                this.breadcrumb.appendChild(item);
+            });
+        }
+    }
+
+    updateCurrentPath() {
+        if (this.currentFolderId === 'root') {
+            this.currentPath.textContent = 'My Drive';
+        } else {
+            const pathItems = ['My Drive', ...this.folderHistory.map(f => f.name), this.getCurrentFolderName()];
+            this.currentPath.textContent = pathItems.join(' > ');
+        }
+    }
+
+    selectCurrentFolder() {
+        this.selectedFolderId = this.currentFolderId;
+        
+        if (this.currentFolderId === 'root') {
+            this.selectedFolderPath = 'My Drive';
+        } else {
+            const pathItems = ['My Drive', ...this.folderHistory.map(f => f.name), this.getCurrentFolderName()];
+            this.selectedFolderPath = pathItems.join(' > ');
+        }
+        
+        this.selectedFolderPathEl.textContent = this.selectedFolderPath;
+        this.closeFolderModalHandler();
+    }
+
+    openNewFolderModal() {
+        this.newFolderModal.style.display = 'flex';
+        this.folderNameInput.value = '';
+        setTimeout(() => this.folderNameInput.focus(), 100);
+    }
+
+    closeNewFolderModalHandler() {
+        this.newFolderModal.style.display = 'none';
+    }
+
+    async createNewFolder() {
+        const folderName = this.folderNameInput.value.trim();
+        if (!folderName) {
+            alert('Please enter a folder name');
+            return;
+        }
+        
+        try {
+            this.createFolderBtn.disabled = true;
+            this.createFolderBtn.textContent = 'Creating...';
+            
+            const token = await this.getValidToken();
+            if (!token) {
+                throw new Error('Not authenticated with Google Drive');
+            }
+            
+            const response = await fetch('https://www.googleapis.com/drive/v3/files', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    name: folderName,
+                    mimeType: 'application/vnd.google-apps.folder',
+                    parents: [this.currentFolderId]
+                })
+            });
+            
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.error?.message || 'Failed to create folder');
+            }
+            
+            this.closeNewFolderModalHandler();
+            await this.loadFolders();
+            
+        } catch (error) {
+            console.error('Error creating folder:', error);
+            alert('Failed to create folder: ' + error.message);
+        } finally {
+            this.createFolderBtn.disabled = false;
+            this.createFolderBtn.textContent = 'Create Folder';
         }
     }
 
     async startExtraction() {
-        if (this.isExtracting || !this.gameData) return;
-        
-        this.isExtracting = true;
-        this.showProgress();
-        this.extractButton.textContent = 'Extracting...';
-        this.extractButton.classList.add('loading');
-        this.extractButton.disabled = true;
+        if (!this.gameData) {
+            alert('No game data available');
+            return;
+        }
         
         try {
-            // Send message to content script to start extraction
-            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-            chrome.tabs.sendMessage(tab.id, { 
+            this.extractBtn.disabled = true;
+            this.progressSection.style.display = 'block';
+            this.resultSection.style.display = 'none';
+            
+            const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+            const tab = tabs[0];
+            
+            await chrome.tabs.sendMessage(tab.id, {
                 action: 'extractRules',
-                gameData: this.gameData 
+                gameData: this.gameData
             });
             
         } catch (error) {
-            console.error('Extraction failed:', error);
-            this.showError('Extraction failed: ' + error.message);
+            console.error('Error starting extraction:', error);
+            this.showResult('error', 'Failed to start extraction: ' + error.message);
+            this.extractBtn.disabled = false;
         }
     }
 
@@ -192,160 +502,140 @@ class PopupController {
                 break;
                 
             case 'extractionError':
-                this.showError(message.error);
+                this.handleExtractionError(message.error);
                 break;
         }
     }
 
     updateProgress(current, total, percent) {
-        this.progressCount.textContent = `${current} / ${total}`;
-        this.progressPercent.textContent = `${Math.round(percent)}%`;
         this.progressFill.style.width = `${percent}%`;
+        this.progressText.textContent = `Extracting threads... ${current}/${total} (${Math.round(percent)}%)`;
     }
 
-    async handleExtractionComplete(extractedData) {
+    async handleExtractionComplete(data) {
         try {
-            // Upload to Google Drive
-            const fileUrl = await this.uploadToGoogleDrive(extractedData);
-            
-            this.hideProgress();
-            this.showResult(`Successfully saved ${extractedData.threads.length} Rules forum threads to Google Drive!`, fileUrl);
-            
-            this.extractButton.textContent = '✓ Saved to Google Drive';
-            this.extractButton.classList.remove('loading');
-            this.extractButton.classList.add('success');
-            
+            await this.uploadToGoogleDrive(data);
         } catch (error) {
             console.error('Upload failed:', error);
-            this.showError('Failed to save to Google Drive: ' + error.message);
+            this.showResult('error', 'Extraction completed but upload failed: ' + error.message);
+        } finally {
+            this.extractBtn.disabled = false;
+            this.progressSection.style.display = 'none';
         }
-        
-        this.isExtracting = false;
+    }
+
+    handleExtractionError(error) {
+        this.showResult('error', 'Extraction failed: ' + error);
+        this.extractBtn.disabled = false;
+        this.progressSection.style.display = 'none';
     }
 
     async uploadToGoogleDrive(data) {
-        const token = await this.getAuthToken();
-        if (!token) {
-            throw new Error('Not authenticated with Google Drive');
+        try {
+            const token = await this.getValidToken();
+            if (!token) {
+                throw new Error('Not authenticated with Google Drive');
+            }
+            
+            const content = this.formatExtractedData(data);
+            const fileName = `BGG_Rules_${data.gameTitle.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.txt`;
+            
+            const metadata = {
+                name: fileName,
+                parents: [this.selectedFolderId]
+            };
+            
+            const delimiter = '-------314159265358979323846';
+            const close_delim = `\r\n--${delimiter}--`;
+            
+            let body = `--${delimiter}\r\n`;
+            body += 'Content-Type: application/json\r\n\r\n';
+            body += JSON.stringify(metadata) + '\r\n';
+            body += `--${delimiter}\r\n`;
+            body += 'Content-Type: text/plain\r\n\r\n';
+            body += content;
+            body += close_delim;
+            
+            const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': `multipart/related; boundary="${delimiter}"`
+                },
+                body: body
+            });
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.error('Upload error response:', errorText);
+                throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+            }
+            
+            const fileData = await response.json();
+            this.uploadedFileId = fileData.id;
+            
+            this.showResult('success', `Successfully extracted ${data.threads.length} Rules forum threads and saved to Google Drive!`);
+            this.viewFileBtn.style.display = 'inline-block';
+            
+        } catch (error) {
+            console.error('Upload error:', error);
+            throw error;
         }
-
-        const fileName = `BGG_Rules_${data.gameTitle.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.txt`;
-        const fileContent = this.formatDataAsText(data);
-        
-        const metadata = {
-            name: fileName
-        };
-
-        const form = new FormData();
-        form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-        form.append('file', new Blob([fileContent], { type: 'text/plain' }));
-
-        const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-            method: 'POST',
-            headers: {
-                'Authorization': `Bearer ${token}`
-            },
-            body: form
-        });
-
-        if (!response.ok) {
-            throw new Error(`Upload failed: ${response.statusText}`);
-        }
-
-        const result = await response.json();
-        return `https://drive.google.com/file/d/${result.id}/view`;
     }
 
-    formatDataAsText(data) {
+    formatExtractedData(data) {
         let content = `BoardGameGeek Rules Forum Export\n`;
+        content += `${'='.repeat(50)}\n\n`;
         content += `Game: ${data.gameTitle}\n`;
         content += `URL: ${data.gameUrl}\n`;
         content += `Extracted: ${new Date().toLocaleString()}\n`;
         content += `Total Rules Threads: ${data.threads.length}\n\n`;
-        content += `=====================================\n\n`;
+        content += `${'='.repeat(50)}\n\n`;
 
         data.threads.forEach((thread, index) => {
-            content += `Thread #${index + 1}: ${thread.title}\n`;
+            content += `Thread #${index + 1}\n`;
+            content += `${'-'.repeat(20)}\n`;
+            content += `Title: ${thread.title}\n`;
             content += `Author: ${thread.author}\n`;
             content += `Posted: ${thread.timestamp}\n`;
             content += `Replies: ${thread.replies}\n`;
             content += `URL: ${thread.url}\n\n`;
             
             if (thread.preview) {
-                content += `${thread.preview}\n\n`;
+                content += `Preview:\n${thread.preview}\n\n`;
             }
             
-            content += `-------------------------------------\n\n`;
+            content += `${'-'.repeat(50)}\n\n`;
         });
+
+        content += `\nExport completed at ${new Date().toLocaleString()}\n`;
+        content += `Generated by BGG Rules Extractor Chrome Extension\n`;
 
         return content;
     }
 
-    showProgress() {
-        this.progressSection.classList.remove('hidden');
-        this.resultSection.classList.add('hidden');
-    }
-
-    hideProgress() {
-        this.progressSection.classList.add('hidden');
-    }
-
-    showResult(message, fileUrl) {
+    showResult(type, message) {
+        this.resultSection.style.display = 'block';
+        this.resultMessage.className = `result-message ${type}`;
         this.resultMessage.textContent = message;
-        this.resultSection.classList.remove('hidden');
-        
-        if (fileUrl) {
-            this.viewFileButton.onclick = () => chrome.tabs.create({ url: fileUrl });
+    }
+
+    viewFile() {
+        if (this.uploadedFileId) {
+            chrome.tabs.create({
+                url: `https://drive.google.com/file/d/${this.uploadedFileId}/view`
+            });
         }
     }
 
-    showError(error) {
-        this.hideProgress();
-        this.extractButton.textContent = '⚠ Error - Retry';
-        this.extractButton.classList.remove('loading');
-        this.extractButton.classList.add('error');
-        this.extractButton.disabled = false;
-        this.isExtracting = false;
-        
-        this.showResult(`Error: ${error}`, null);
-    }
-
-    updateGameStatus(type, text) {
-        this.gameStatus.className = `status-icon ${type}`;
-        this.gameStatus.textContent = type === 'success' ? '✓' : type === 'warning' ? '⚠' : '✗';
-        this.gameStatusText.textContent = text;
-    }
-
-    updateRulesStatus(type, text) {
-        this.rulesStatus.className = `status-icon ${type}`;
-        this.rulesStatus.textContent = type === 'success' ? '✓' : type === 'warning' ? '⚠' : '✗';
-        this.rulesStatusText.textContent = text;
-    }
-
-    updateDriveStatus(type, text) {
-        this.driveStatus.className = `status-icon ${type}`;
-        this.driveStatus.textContent = type === 'success' ? '✓' : type === 'warning' ? '⚠' : '✗';
-        this.driveStatusText.textContent = text;
-    }
-
     openSettings() {
-        // TODO: Implement settings page
         alert('Settings functionality coming soon!');
     }
 
     openHelp() {
-        chrome.tabs.create({ 
-            url: 'https://github.com/your-repo/bgg-rules-extractor#help' 
+        chrome.tabs.create({
+            url: 'https://github.com/Mizio66/BGGForumScraper'
         });
-    }
-
-    viewFile() {
-        // Handled in showResult method
-    }
-
-    downloadFile() {
-        // TODO: Implement local download
-        alert('Download functionality coming soon!');
     }
 }
 

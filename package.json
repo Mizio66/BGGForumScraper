@@ -1,0 +1,56 @@
+{
+  "name": "bgg-rules-extractor",
+  "version": "1.0.0",
+  "description": "Chrome extension to extract Rules forums from BoardGameGeek and save to Google Drive",
+  "main": "setup.js",
+  "scripts": {
+    "setup": "node setup.js",
+    "test": "node test_extraction.html",
+    "build": "npm run setup",
+    "package": "zip -r bgg-rules-extractor.zip . -x '*.git*' 'node_modules/*' '*.pem' 'package*.json' 'setup.js' 'test_*' '*.md'",
+    "clean": "rm -f *.pem bgg-rules-extractor.zip"
+  },
+  "keywords": [
+    "chrome-extension",
+    "boardgamegeek",
+    "bgg",
+    "rules",
+    "forum",
+    "extractor",
+    "google-drive"
+  ],
+  "author": "BGG Rules Extractor Team",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/your-username/bgg-rules-extractor.git"
+  },
+  "bugs": {
+    "url": "https://github.com/your-username/bgg-rules-extractor/issues"
+  },
+  "homepage": "https://github.com/your-username/bgg-rules-extractor#readme",
+  "engines": {
+    "node": ">=14.0.0"
+  },
+  "devDependencies": {},
+  "dependencies": {},
+  "extensionInfo": {
+    "manifestVersion": 3,
+    "permissions": [
+      "activeTab",
+      "storage",
+      "identity"
+    ],
+    "hostPermissions": [
+      "https://boardgamegeek.com/*",
+      "https://www.googleapis.com/*"
+    ],
+    "apis": {
+      "googleDrive": {
+        "scope": "https://www.googleapis.com/auth/drive.file",
+        "description": "Save extracted forum data to Google Drive"
+      }
+    }
+  }
+}
+

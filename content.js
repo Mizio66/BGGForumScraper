@@ -33,21 +33,22 @@ class BGGRulesExtractor {
         try {
             // Check if we're on a BGG game page
             const url = window.location.href;
-            const gameMatch = url.match(/boardgame\/(\d+)\/([^\/]+)/);
+            const gameMatch = url.match(/boardgamegeek\.com\/boardgame\/(\d+)\/([^\/]+)/);
             
             if (!gameMatch) {
                 return null;
             }
-
+            
             const gameId = gameMatch[1];
             const gameSlug = gameMatch[2];
             
-            // Extract game title from page
-            const titleElement = document.querySelector('h1 a[href*="/boardgame/"]') || 
+            // Extract game title from page - try multiple selectors
+            const titleElement = document.querySelector('h1 a[href*="/boardgame/"]') ||
                                 document.querySelector('.game-header-title-info h1') ||
-                                document.querySelector('[data-objectid] h1');
+                                document.querySelector('[data-objectid] h1') ||
+                                document.querySelector('h1');
             
-            const gameTitle = titleElement ? titleElement.textContent.trim() : gameSlug.replace(/-/g, ' ');
+            const gameTitle = titleElement ? titleElement.textContent.trim().replace(/-/g, ' ') : gameSlug.replace(/-/g, ' ');
             
             // Check if Rules forum exists and count threads
             const rulesForumCount = await this.checkRulesForumCount(gameId);
@@ -71,7 +72,7 @@ class BGGRulesExtractor {
         try {
             // Look for Rules forum link on current page
             const rulesLink = document.querySelector('a[href*="/forums/66"]') ||
-                             document.querySelector('a:contains("Rules")');
+                            document.querySelector('a:contains("Rules")');
             
             if (rulesLink) {
                 const countText = rulesLink.textContent;
@@ -92,7 +93,7 @@ class BGGRulesExtractor {
                                 doc.querySelector('text:contains("of")');
             
             if (countElement) {
-                const countMatch = countElement.textContent.match(/of\s+(\d+)/);
+                const countMatch = countElement.textContent.match(/of\s*(\d+)/);
                 return countMatch ? parseInt(countMatch[1]) : 0;
             }
             
@@ -147,10 +148,10 @@ class BGGRulesExtractor {
         
         // Extract total count from pagination or thread listing
         const totalCountElement = firstPageDoc.querySelector('.forum-pagination-info') ||
-                                 firstPageDoc.querySelector('[data-total]');
+                                firstPageDoc.querySelector('[data-total]');
         
         if (totalCountElement) {
-            const totalMatch = totalCountElement.textContent.match(/of\s+(\d+)/);
+            const totalMatch = totalCountElement.textContent.match(/of\s*(\d+)/);
             totalThreads = totalMatch ? parseInt(totalMatch[1]) : gameData.rulesForumCount;
         } else {
             totalThreads = gameData.rulesForumCount;
@@ -159,114 +160,61 @@ class BGGRulesExtractor {
         // Extract threads from each page
         while (true) {
             const pageUrl = `${baseUrl}?page=${currentPage}`;
+            const response = await fetch(pageUrl);
+            const html = await response.text();
+            const doc = new DOMParser().parseFromString(html, 'text/html');
             
-            try {
-                const response = await fetch(pageUrl);
-                const html = await response.text();
-                const doc = new DOMParser().parseFromString(html, 'text/html');
-                
-                const threads = this.extractThreadsFromPage(doc, gameData.id);
-                
-                if (threads.length === 0) {
-                    break; // No more threads found
+            // Extract threads from current page
+            const threadElements = doc.querySelectorAll('.forum-thread-row, .forum-post-row, tr[id*="row_"]');
+            
+            if (threadElements.length === 0) {
+                break; // No more threads
+            }
+            
+            for (const threadElement of threadElements) {
+                try {
+                    const titleLink = threadElement.querySelector('a[href*="/thread/"]');
+                    const authorElement = threadElement.querySelector('.username, .forum-post-author');
+                    const dateElement = threadElement.querySelector('.forum-post-date, .post-date');
+                    const replyElement = threadElement.querySelector('.forum-post-replies, .reply-count');
+                    
+                    if (titleLink) {
+                        const thread = {
+                            title: titleLink.textContent.trim(),
+                            url: titleLink.href.startsWith('http') ? titleLink.href : `https://boardgamegeek.com${titleLink.href}`,
+                            author: authorElement ? authorElement.textContent.trim() : 'Unknown',
+                            timestamp: dateElement ? dateElement.textContent.trim() : 'Unknown',
+                            replies: replyElement ? replyElement.textContent.trim() : '0'
+                        };
+                        
+                        this.extractedThreads.push(thread);
+                        extractedCount++;
+                        
+                        // Send progress update
+                        const percent = totalThreads > 0 ? (extractedCount / totalThreads) * 100 : 0;
+                        chrome.runtime.sendMessage({
+                            action: 'extractionProgress',
+                            current: extractedCount,
+                            total: totalThreads,
+                            percent: percent
+                        });
+                    }
+                } catch (error) {
+                    console.error('Error extracting thread:', error);
                 }
-                
-                this.extractedThreads.push(...threads);
-                extractedCount += threads.length;
-                
-                // Send progress update
-                const progress = Math.min((extractedCount / totalThreads) * 100, 100);
-                chrome.runtime.sendMessage({
-                    action: 'extractionProgress',
-                    current: extractedCount,
-                    total: totalThreads,
-                    percent: progress
-                });
-                
-                // Check if we've reached the end
-                const nextPageLink = doc.querySelector('.pagination a[rel="next"]') ||
-                                   doc.querySelector('.pagination a:contains("Next")');
-                
-                if (!nextPageLink) {
-                    break;
-                }
-                
-                currentPage++;
-                
-                // Add delay to avoid overwhelming the server
-                await this.delay(500);
-                
-            } catch (error) {
-                console.error(`Error extracting page ${currentPage}:`, error);
+            }
+            
+            // Check if there's a next page
+            const nextPageLink = doc.querySelector('.forum-pagination .next, a[rel="next"]');
+            if (!nextPageLink || nextPageLink.classList.contains('disabled')) {
                 break;
             }
+            
+            currentPage++;
+            
+            // Add small delay to avoid overwhelming the server
+            await new Promise(resolve => setTimeout(resolve, 500));
         }
-    }
-
-    extractThreadsFromPage(doc, gameId) {
-        const threads = [];
-        
-        // Look for thread rows in the forum table
-        const threadRows = doc.querySelectorAll('.forum-table tbody tr') ||
-                          doc.querySelectorAll('.forum-thread-row') ||
-                          doc.querySelectorAll('[data-thread-id]');
-        
-        threadRows.forEach(row => {
-            try {
-                const thread = this.extractThreadData(row, gameId);
-                if (thread) {
-                    threads.push(thread);
-                }
-            } catch (error) {
-                console.error('Error extracting thread data:', error);
-            }
-        });
-        
-        return threads;
-    }
-
-    extractThreadData(row, gameId) {
-        // Extract thread title and URL
-        const titleLink = row.querySelector('a[href*="/article/"]') ||
-                         row.querySelector('.thread-title a') ||
-                         row.querySelector('td:first-child a');
-        
-        if (!titleLink) return null;
-        
-        const title = titleLink.textContent.trim();
-        const threadUrl = titleLink.href.startsWith('http') ? 
-                         titleLink.href : 
-                         `https://boardgamegeek.com${titleLink.getAttribute('href')}`;
-        
-        // Extract author
-        const authorLink = row.querySelector('a[href*="/user/"]') ||
-                          row.querySelector('.thread-author a');
-        const author = authorLink ? authorLink.textContent.trim() : 'Unknown';
-        
-        // Extract timestamp
-        const timeElement = row.querySelector('.forum-date') ||
-                           row.querySelector('.thread-date') ||
-                           row.querySelector('time');
-        const timestamp = timeElement ? timeElement.textContent.trim() : 'Unknown';
-        
-        // Extract reply count
-        const replyElement = row.querySelector('.forum-replies') ||
-                            row.querySelector('.thread-replies') ||
-                            row.querySelector('td:nth-child(3)');
-        const replies = replyElement ? replyElement.textContent.trim() : '0';
-        
-        return {
-            title: title,
-            url: threadUrl,
-            author: author,
-            timestamp: timestamp,
-            replies: replies,
-            preview: null // Could be expanded to fetch thread preview
-        };
-    }
-
-    delay(ms) {
-        return new Promise(resolve => setTimeout(resolve, ms));
     }
 }
 

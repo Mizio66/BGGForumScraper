@@ -7,65 +7,140 @@
     <link rel="stylesheet" href="popup.css">
 </head>
 <body>
-    <div class="extension-popup">
+    <div class="container">
+        <!-- Header -->
         <div class="header">
-            <h1>BGG Rules Extractor</h1>
-            <div class="game-info" id="gameInfo">
-                <div class="game-icon" id="gameIcon">?</div>
-                <div class="game-title" id="gameTitle">No game detected</div>
+            <div class="logo">
+                <span class="logo-icon">R</span>
+                <span class="logo-text">BGG Rules Extractor</span>
             </div>
         </div>
 
-        <div class="content">
-            <div class="status-section">
-                <div class="status-item">
-                    <div class="status-icon" id="gameStatus">⚠</div>
-                    <span class="status-text" id="gameStatusText">Checking page...</span>
+        <!-- Game Info Section -->
+        <div class="game-info" id="gameInfo">
+            <div class="game-title" id="gameTitle">Detecting game...</div>
+            <div class="game-status" id="gameStatus">
+                <div class="status-item" id="gameDetected">
+                    <span class="status-icon">⏳</span>
+                    <span class="status-text">Game detected</span>
                 </div>
-                <div class="status-item">
-                    <div class="status-icon" id="rulesStatus">⚠</div>
-                    <span class="status-text" id="rulesStatusText">Checking Rules forum...</span>
-                    <span class="status-count" id="rulesCount"></span>
+                <div class="status-item" id="rulesFound">
+                    <span class="status-icon">⏳</span>
+                    <span class="status-text">Rules forum found</span>
                 </div>
-                <div class="status-item">
-                    <div class="status-icon" id="driveStatus">⚠</div>
-                    <span class="status-text" id="driveStatusText">Checking Google Drive...</span>
-                </div>
-            </div>
-
-            <div class="actions-section">
-                <button class="primary-button" id="extractButton" disabled>
-                    Extract Rules Forums
-                </button>
-                <div class="secondary-buttons">
-                    <button class="secondary-button" id="settingsButton">Settings</button>
-                    <button class="secondary-button" id="helpButton">Help</button>
+                <div class="status-item" id="driveConnected">
+                    <span class="status-icon">⏳</span>
+                    <span class="status-text">Google Drive connected</span>
                 </div>
             </div>
+        </div>
 
-            <div class="progress-section hidden" id="progressSection">
-                <div class="progress-text" id="progressText">Extracting Rules Forums...</div>
+        <!-- Google Drive Section -->
+        <div class="drive-section" id="driveSection" style="display: none;">
+            <div class="drive-auth" id="driveAuth">
+                <button class="btn btn-primary" id="connectDriveBtn">Connect Google Drive</button>
+            </div>
+            
+            <div class="folder-selection" id="folderSelection" style="display: none;">
+                <div class="folder-info">
+                    <span class="folder-icon">📁</span>
+                    <span class="folder-path" id="selectedFolderPath">My Drive</span>
+                </div>
+                <button class="btn btn-secondary" id="browseFoldersBtn">Browse Folders</button>
+            </div>
+        </div>
+
+        <!-- Action Section -->
+        <div class="action-section" id="actionSection" style="display: none;">
+            <button class="btn btn-primary btn-large" id="extractBtn" disabled>
+                Extract Rules Forums
+            </button>
+            
+            <div class="progress-section" id="progressSection" style="display: none;">
                 <div class="progress-bar">
                     <div class="progress-fill" id="progressFill"></div>
                 </div>
-                <div class="progress-stats">
-                    <span id="progressCount">0 / 0</span>
-                    <span id="progressPercent">0%</span>
-                </div>
+                <div class="progress-text" id="progressText">Extracting threads...</div>
             </div>
-
-            <div class="result-section hidden" id="resultSection">
+            
+            <div class="result-section" id="resultSection" style="display: none;">
                 <div class="result-message" id="resultMessage"></div>
-                <div class="result-actions">
-                    <button class="secondary-button" id="viewFileButton">View File</button>
-                    <button class="secondary-button" id="downloadButton">Download</button>
-                </div>
+                <button class="btn btn-secondary" id="viewFileBtn" style="display: none;">View File</button>
             </div>
         </div>
 
+        <!-- Footer -->
         <div class="footer">
+            <div class="footer-links">
+                <button class="link-btn" id="settingsBtn">Settings</button>
+                <button class="link-btn" id="helpBtn">Help</button>
+            </div>
             <div class="footer-text">
-                Powered by <a href="#" class="footer-link">BGG Rules Extractor</a>
+                Powered by <a href="https://github.com/Mizio66/BGGForumScraper" target="_blank">BGG Rules Extractor</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Folder Browser Modal -->
+    <div class="modal-overlay" id="folderModal" style="display: none;">
+        <div class="modal">
+            <div class="modal-header">
+                <h3>Choose Google Drive Folder</h3>
+                <button class="modal-close" id="closeFolderModal">&times;</button>
+            </div>
+            
+            <div class="modal-body">
+                <!-- Breadcrumb Navigation -->
+                <div class="breadcrumb" id="breadcrumb">
+                    <span class="breadcrumb-item active" data-folder-id="root">My Drive</span>
+                </div>
+                
+                <!-- Navigation Controls -->
+                <div class="folder-controls">
+                    <button class="btn btn-secondary" id="backBtn" disabled>← Back</button>
+                    <button class="btn btn-secondary" id="newFolderBtn">+ New Folder</button>
+                </div>
+                
+                <!-- Folder List -->
+                <div class="folder-list" id="folderList">
+                    <div class="loading" id="folderLoading">
+                        <div class="spinner"></div>
+                        <span>Loading folders...</span>
+                    </div>
+                </div>
+                
+                <!-- Current Selection -->
+                <div class="current-selection">
+                    <span>Current: </span>
+                    <span class="current-path" id="currentPath">My Drive</span>
+                </div>
+            </div>
+            
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelFolderBtn">Cancel</button>
+                <button class="btn btn-primary" id="selectFolderBtn">Select This Folder</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Folder Modal -->
+    <div class="modal-overlay" id="newFolderModal" style="display: none;">
+        <div class="modal modal-small">
+            <div class="modal-header">
+                <h3>Create New Folder</h3>
+                <button class="modal-close" id="closeNewFolderModal">&times;</button>
+            </div>
+            
+            <div class="modal-body">
+                <div class="form-group">
+                    <label for="folderNameInput">Folder Name:</label>
+                    <input type="text" id="folderNameInput" class="form-input" placeholder="Enter folder name">
+                </div>
+            </div>
+            
+            <div class="modal-footer">
+                <button class="btn btn-secondary" id="cancelNewFolderBtn">Cancel</button>
+                <button class="btn btn-primary" id="createFolderBtn">Create Folder</button>
             </div>
         </div>
     </div>

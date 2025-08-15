@@ -29,75 +29,106 @@ class BackgroundService {
     async initializeStorage() {
         const defaultSettings = {
             autoSave: true,
-            includeThreadPreviews: false,
-            maxThreadsPerExtraction: 1000,
-            extractionDelay: 500
+            includeTimestamps: true,
+            selectedFolderId: 'root',
+            selectedFolderPath: 'My Drive'
         };
 
         try {
-            await chrome.storage.sync.set({
-                settings: defaultSettings,
-                lastExtraction: null,
-                totalExtractions: 0
-            });
+            const stored = await chrome.storage.sync.get(defaultSettings);
+            await chrome.storage.sync.set(stored);
+            console.log('Storage initialized with default settings');
         } catch (error) {
-            console.error('Storage initialization failed:', error);
+            console.error('Error initializing storage:', error);
         }
     }
 
     async handleMessage(message, sender, sendResponse) {
         try {
             switch (message.action) {
-                case 'getAuthToken':
-                    const token = await this.getGoogleDriveToken(message.interactive);
-                    sendResponse({ success: true, token: token });
+                case 'getSettings':
+                    const settings = await this.getSettings();
+                    sendResponse({ success: true, data: settings });
+                    break;
+
+                case 'saveSettings':
+                    await this.saveSettings(message.settings);
+                    sendResponse({ success: true });
                     break;
 
                 case 'uploadToGoogleDrive':
-                    const uploadResult = await this.uploadToGoogleDrive(message.data);
-                    sendResponse({ success: true, result: uploadResult });
+                    const result = await this.uploadToGoogleDrive(message.data);
+                    sendResponse({ success: true, data: result });
+                    break;
+
+                case 'extractionProgress':
+                case 'extractionComplete':
+                case 'extractionError':
+                    // Forward these messages to the popup if it's open
+                    this.forwardToPopup(message);
+                    sendResponse({ success: true });
                     break;
 
                 default:
+                    console.log('Unknown message action:', message.action);
                     sendResponse({ success: false, error: 'Unknown action' });
             }
         } catch (error) {
-            console.error('Background script error:', error);
+            console.error('Error handling message:', error);
             sendResponse({ success: false, error: error.message });
         }
     }
 
-    async getGoogleDriveToken(interactive = false) {
-        return new Promise((resolve, reject) => {
-            chrome.identity.getAuthToken({ interactive: interactive }, (token) => {
-                if (chrome.runtime.lastError) {
-                    reject(new Error(chrome.runtime.lastError.message));
-                } else {
-                    resolve(token);
-                }
-            });
-        });
+    async getSettings() {
+        try {
+            const defaultSettings = {
+                autoSave: true,
+                includeTimestamps: true,
+                selectedFolderId: 'root',
+                selectedFolderPath: 'My Drive'
+            };
+            return await chrome.storage.sync.get(defaultSettings);
+        } catch (error) {
+            console.error('Error getting settings:', error);
+            throw error;
+        }
+    }
+
+    async saveSettings(settings) {
+        try {
+            await chrome.storage.sync.set(settings);
+            console.log('Settings saved successfully');
+        } catch (error) {
+            console.error('Error saving settings:', error);
+            throw error;
+        }
     }
 
     async uploadToGoogleDrive(data) {
         try {
-            const token = await this.getGoogleDriveToken(false);
+            const token = await chrome.identity.getAuthToken({ interactive: false });
             if (!token) {
                 throw new Error('Not authenticated with Google Drive');
             }
 
-            const fileName = this.generateFileName(data.gameTitle);
-            const fileContent = this.formatDataAsText(data);
-            
+            // Format the extracted data
+            const content = this.formatExtractedData(data);
+            const fileName = `BGG_Rules_${data.gameTitle.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.txt`;
+
+            // Get selected folder from settings
+            const settings = await this.getSettings();
+            const folderId = settings.selectedFolderId || 'root';
+
+            // Create file metadata
             const metadata = {
                 name: fileName,
-                parents: ['appDataFolder'],
-                description: `BGG Rules forum export for ${data.gameTitle}`
+                parents: [folderId]
             };
 
+            // Upload file
             const form = new FormData();
             form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
-            form.append('file', new Blob([fileContent], { type: 'text/plain; charset=utf-8' }));
+            form.append('file', new Blob([content], { type: 'text/plain' }));
 
             const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
                 method: 'POST',
@@ -105,35 +136,26 @@ class BackgroundService {
                     'Authorization': `Bearer ${token}`
                 },
                 body: form
-            } );
+            });
 
             if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(`Upload failed: ${errorData.error?.message || response.statusText}`);
+                throw new Error('Upload failed');
             }
 
-            const result = await response.json();
-            
+            const fileData = await response.json();
             return {
-                fileId: result.id,
+                fileId: fileData.id,
                 fileName: fileName,
-                fileUrl: `https://drive.google.com/file/d/${result.id}/view`,
-                downloadUrl: `https://drive.google.com/uc?id=${result.id}&export=download`
+                fileUrl: `https://drive.google.com/file/d/${fileData.id}/view`
             };
 
-        } catch (error ) {
-            console.error('Google Drive upload error:', error);
+        } catch (error) {
+            console.error('Upload error:', error);
             throw error;
         }
     }
 
-    generateFileName(gameTitle) {
-        const sanitizedTitle = gameTitle.replace(/[^a-zA-Z0-9\s]/g, '').replace(/\s+/g, '_');
-        const timestamp = new Date().toISOString().split('T')[0];
-        return `BGG_Rules_${sanitizedTitle}_${timestamp}.txt`;
-    }
-
-    formatDataAsText(data) {
+    formatExtractedData(data) {
         let content = `BoardGameGeek Rules Forum Export\n`;
         content += `${'='.repeat(50)}\n\n`;
         content += `Game: ${data.gameTitle}\n`;
@@ -163,7 +185,18 @@ class BackgroundService {
 
         return content;
     }
+
+    async forwardToPopup(message) {
+        try {
+            // Try to send message to popup if it's open
+            await chrome.runtime.sendMessage(message);
+        } catch (error) {
+            // Popup might not be open, which is fine
+            console.log('Could not forward message to popup (popup may be closed)');
+        }
+    }
 }
 
 // Initialize the background service
 new BackgroundService();
+
