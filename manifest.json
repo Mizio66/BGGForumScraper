@@ -1,48 +1,38 @@
 {
   "manifest_version": 3,
   "name": "BGG Rules Extractor",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Extract Rules forums from BoardGameGeek game pages and save to Google Drive",
+  "action": {
+    "default_title": "BGG Rules Extractor",
+    "default_popup": "popup.html"
+  },
   "permissions": [
     "activeTab",
     "storage",
-    "identity"
+    "identity",
+    "notifications",
+    "scripting"
   ],
   "host_permissions": [
-    "https://boardgamegeek.com/*",
+    "https://*.boardgamegeek.com/*",
+    "https://api.boardgamegeek.com/*",
     "https://www.googleapis.com/*"
   ],
-  "action": {
-    "default_popup": "popup.html",
-    "default_title": "BGG Rules Extractor",
-    "default_icon": {
-      "16": "icons/icon16.png",
-      "32": "icons/icon32.png",
-      "48": "icons/icon48.png",
-      "128": "icons/icon128.png"
-    }
-  },
-  "icons": {
-    "16": "icons/icon16.png",
-    "32": "icons/icon32.png",
-    "48": "icons/icon48.png",
-    "128": "icons/icon128.png"
-  },
-  "content_scripts": [
-    {
-      "matches": ["https://boardgamegeek.com/boardgame/*"],
-      "js": ["content.js"],
-      "run_at": "document_idle"
-    }
-  ],
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "type": "module"
   },
   "oauth2": {
     "client_id": "1058685213583-6q7jv168rkngc0do12g625q2ocge1pru.apps.googleusercontent.com",
     "scopes": [
       "https://www.googleapis.com/auth/drive.file"
     ]
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
   }
 }
-
