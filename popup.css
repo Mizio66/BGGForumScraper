@@ -11,11 +11,13 @@ body {
     line-height: 1.4;
     color: #333;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    width: 380px;
-    min-height: 500px;
+    width: 420px;
+    min-height: 420px;
 }
 
 .container {
+    max-height: 560px;
+    overflow-y: auto;
     background: white;
     border-radius: 12px;
     margin: 8px;
@@ -27,7 +29,7 @@ body {
 .header {
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
-    padding: 16px 20px;
+    padding: 12px 16px;
     text-align: center;
 }
 
@@ -70,12 +72,13 @@ body {
 }
 
 .game-status {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
 }
 
 .status-item {
+    min-height: 40px;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -258,7 +261,7 @@ body {
 
 /* Footer */
 .footer {
-    padding: 16px 20px;
+    padding: 12px 16px;
     background: #f8f9fa;
     border-top: 1px solid #eee;
 }
@@ -331,7 +334,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 16px 20px;
+    padding: 12px 16px;
     border-bottom: 1px solid #eee;
 }
 
@@ -370,7 +373,7 @@ body {
     display: flex;
     justify-content: flex-end;
     gap: 8px;
-    padding: 16px 20px;
+    padding: 12px 16px;
     border-top: 1px solid #eee;
 }
 
@@ -550,6 +553,8 @@ body {
     }
     
     .container {
+    max-height: 560px;
+    overflow-y: auto;
         margin: 4px;
         border-radius: 8px;
     }

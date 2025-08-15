@@ -4,6 +4,14 @@ class BackgroundService {
         this.setupEventListeners();
     }
 
+    // Normalize token (Chrome may return a string or an object)
+    asTokenString(t) {
+        if (typeof t === 'string') return t;
+        if (t && typeof t.token === 'string') return t.token;
+        return null;
+    }
+
+
     setupEventListeners() {
         // Handle extension installation
         chrome.runtime.onInstalled.addListener((details) => {
@@ -106,7 +114,8 @@ class BackgroundService {
 
     async uploadToGoogleDrive(data) {
         try {
-            const token = await chrome.identity.getAuthToken({ interactive: false });
+            let token = await chrome.identity.getAuthToken({ interactive: false });
+            token = this.asTokenString(token);
             if (!token) {
                 throw new Error('Not authenticated with Google Drive');
             }
@@ -133,7 +142,7 @@ class BackgroundService {
             const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${token}`
+                    'Authorization': `Bearer ${this.asTokenString(token) || token}`
                 },
                 body: form
             });

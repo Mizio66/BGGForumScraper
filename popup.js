@@ -13,6 +13,14 @@ class PopupController {
         this.setupEventListeners();
         this.checkPageAndAuth();
     }
+    
+    // Normalize token (Chrome may return a string or an object)
+    asTokenString(t) {
+        if (typeof t === 'string') return t;
+        if (t && typeof t.token === 'string') return t.token;
+        return null;
+    }
+
 
     initializeElements() {
         // Game info elements
@@ -214,22 +222,23 @@ class PopupController {
         try {
             // First try to get cached token
             let token = await chrome.identity.getAuthToken({ interactive: false });
+            token = this.asTokenString(token);
             
             if (token) {
                 // Test if token is valid by making a simple API call
                 const testResponse = await fetch('https://www.googleapis.com/drive/v3/about?fields=user', {
                     headers: {
-                        'Authorization': `Bearer ${token}`
+                        'Authorization': `Bearer ${this.asTokenString(token) || token}`
                     }
                 });
                 
                 if (testResponse.ok) {
-                    return token;
+                    return this.asTokenString(token);
                 } else {
                     // Token is invalid, remove it and get a new one
                     await chrome.identity.removeCachedAuthToken({ token });
                     token = await chrome.identity.getAuthToken({ interactive: false });
-                    return token;
+                    return this.asTokenString(token);
                 }
             }
             
@@ -244,12 +253,14 @@ class PopupController {
         try {
             // Clear any cached tokens first
             const oldToken = await chrome.identity.getAuthToken({ interactive: false });
-            if (oldToken) {
-                await chrome.identity.removeCachedAuthToken({ token: oldToken });
+            const oldTokenStr = this.asTokenString(oldToken);
+            if (oldTokenStr) {
+                await chrome.identity.removeCachedAuthToken({ token: oldTokenStr });
             }
             
             // Get fresh token with user interaction
             const token = await chrome.identity.getAuthToken({ interactive: true });
+            token = this.asTokenString(token);
             if (token) {
                 this.updateStatusItem(this.driveConnected, 'success', 'Google Drive connected');
                 this.folderSelection.style.display = 'flex';
@@ -294,7 +305,7 @@ class PopupController {
             
             const response = await fetch(`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name)&orderBy=name`, {
                 headers: {
-                    'Authorization': `Bearer ${token}`
+                    'Authorization': `Bearer ${this.asTokenString(token) || token}`
                 }
             });
             
@@ -438,7 +449,7 @@ class PopupController {
             const response = await fetch('https://www.googleapis.com/drive/v3/files', {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${token}`,
+                    'Authorization': `Bearer ${this.asTokenString(token) || token}`,
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({
@@ -559,7 +570,7 @@ class PopupController {
             const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
                 method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${token}`,
+                    'Authorization': `Bearer ${this.asTokenString(token) || token}`,
                     'Content-Type': `multipart/related; boundary="${delimiter}"`
                 },
                 body: body
