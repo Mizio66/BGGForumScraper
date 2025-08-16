@@ -15,7 +15,7 @@
       </div>
     </header>
 
-    <section class="status-grid" id="statusGrid">
+    <section class="status-grid">
       <div class="status ok" id="statusGame">
         <div class="s-title">Game</div>
         <div class="s-msg" id="statusGameMsg">—</div>
@@ -36,7 +36,18 @@
 
     <section class="actions">
       <button id="connectBtn" class="btn primary">Connect Google Drive</button>
+      <button id="chooseFolderBtn" class="btn">Choose folder</button>
       <button id="extractBtn" class="btn" disabled>Extract & Save</button>
+    </section>
+
+    <section class="chosen" id="chosenFolder">
+      <div class="label">Destination:</div>
+      <div id="folderPath">My Drive (root)</div>
+    </section>
+
+    <section class="progress">
+      <div class="bar"><div id="pbar"></div></div>
+      <div class="ptext" id="ptext">Idle</div>
     </section>
 
     <section class="log" id="log"></section>
@@ -46,6 +57,27 @@
       <a href="#" id="helpLink">Help</a>
     </footer>
   </div>
+
+  <!-- Folder browser modal (opens only when user clicks Choose folder) -->
+  <div class="modal" id="folderModal" hidden>
+    <div class="modal-card">
+      <div class="modal-hdr">
+        <div>Choose destination folder</div>
+        <button id="closeModal" class="xbtn" title="Close">×</button>
+      </div>
+      <div class="crumbs" id="crumbs">My Drive</div>
+      <div class="modal-body">
+        <div class="list" id="folderList">Loading…</div>
+      </div>
+      <div class="modal-actions">
+        <input type="text" id="newFolderName" placeholder="New folder name">
+        <button class="btn" id="createFolderBtn">Create</button>
+        <div class="spacer"></div>
+        <button class="btn primary" id="selectThisFolderBtn">Select this folder</button>
+      </div>
+    </div>
+  </div>
+
   <script type="module" src="popup.js"></script>
 </body>
 </html>

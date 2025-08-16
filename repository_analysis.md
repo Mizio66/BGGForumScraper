@@ -1,1 +1,1 @@
-Layout corrected; token normalization added; see README.
+Implements scraping and folder browser.

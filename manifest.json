@@ -12,11 +12,12 @@
     "storage",
     "identity",
     "notifications",
-    "scripting"
+    "scripting",
+    "tabs"
   ],
   "host_permissions": [
     "https://*.boardgamegeek.com/*",
-    "https://api.boardgamegeek.com/*",
+    "https://boardgamegeek.com/*",
     "https://www.googleapis.com/*"
   ],
   "background": {
@@ -26,7 +27,8 @@
   "oauth2": {
     "client_id": "1058685213583-6q7jv168rkngc0do12g625q2ocge1pru.apps.googleusercontent.com",
     "scopes": [
-      "https://www.googleapis.com/auth/drive.file"
+      "https://www.googleapis.com/auth/drive.file",
+      "https://www.googleapis.com/auth/drive.metadata.readonly"
     ]
   },
   "icons": {
